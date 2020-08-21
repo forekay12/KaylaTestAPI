@@ -31,21 +31,13 @@ var DeviceInfos []DeviceInfo
 func returnAllGeos(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Endpoint Hit: All Geos Endpoint")
 	json.NewEncoder(w).Encode(Geos)
-	if r.Method == "HEAD" {
-		fmt.Println("/device/info HEAD Request recieved!")
-	} else {
-		fmt.Println("/device/info GET Request recieved!")
-	}
+	fmt.Println("/device/info " + r.Method + " Request recieved!")
 }
 
 func returnAllDeviceInfos(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Endpoint Hit: All DeviceInfos Endpoint")
 	json.NewEncoder(w).Encode(DeviceInfos)
-	if r.Method == "HEAD" {
-		fmt.Println("/geo HEAD Request recieved!")
-	} else {
-		fmt.Println("/geo GET Request recieved!")
-	}
+	fmt.Println("/geo " + r.Method + " Request recieved!")
 }
 
 func homePage(w http.ResponseWriter, r *http.Request) {
