@@ -1,43 +1,89 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/mux"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type Geo struct {
-	DeviceID  string `json:"device_id"`
-	Latitude  string `json:"latitude"`
-	Longitude string `json:"longitude"`
-	IPAddress string `json:"ip_address"`
+	DeviceID  primitive.ObjectID `json:"_id,omitempty" bson:"_id,omitempty"`
+	Latitude  string             `json:"latitude,omitempty" bson:"latitude,omitempty"`
+	Longitude string             `json:"longitude,omitempty" bson:"longitude,omitempty"`
+	IPAddress string             `json:"ip_address,omitempty" bson:"ip_address,omitempty"`
 }
 
 type DeviceInfo struct {
-	DeviceID          string `json:"device_id"`
-	UserAgent         string `json:"user_agent"`
-	IPAddress         string `json:"ip_address"`
-	BatteryLevel      string `json:"battery_level"`
-	ScreenOrientation string `json:"screen_orientation"`
+	DeviceID          primitive.ObjectID `json:"_id,omitempty" bson:"_id,omitempty"`
+	UserAgent         string             `json:"user_agent,omitempty" bson:"user_agent,omitempty"`
+	IPAddress         string             `json:"ip_address,omitempty" bson:"ip_address,omitempty"`
+	BatteryLevel      string             `json:"battery_level,omitempty" bson:"battery_level,omitempty"`
+	ScreenOrientation string             `json:"screen_orientation,omitempty" bson:"screen_orientation,omitempty"`
 }
 
-var Geos []Geo
-var DeviceInfos []DeviceInfo
+var client *mongo.Client
 
 func returnAllGeos(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("content-type", "application/json")
+	var geos []Geo
+	collection := client.Database("kaylatestapi").Collection("geo")
+	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
+	cursor, err := collection.Find(ctx, bson.M{})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		return
+	}
+	defer cursor.Close(ctx)
+	for cursor.Next(ctx) {
+		var geo Geo
+		cursor.Decode(&geo)
+		geos = append(geos, geo)
+	}
+	if err := cursor.Err(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		return
+	}
+	json.NewEncoder(w).Encode(geos)
 	fmt.Println("Endpoint Hit: All Geos Endpoint")
-	json.NewEncoder(w).Encode(Geos)
-	fmt.Println("/device/info " + r.Method + " Request recieved!")
+	fmt.Println("/geos "+r.Method+" request recieved: ", geos)
 }
 
 func returnAllDeviceInfos(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("content-type", "application/json")
+	var deviceInfos []DeviceInfo
+	collection := client.Database("kaylatestapi").Collection("deviceinfo")
+	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
+	cursor, err := collection.Find(ctx, bson.M{})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		return
+	}
+	defer cursor.Close(ctx)
+	for cursor.Next(ctx) {
+		var deviceInfo DeviceInfo
+		cursor.Decode(&deviceInfo)
+		deviceInfos = append(deviceInfos, deviceInfo)
+	}
+	if err := cursor.Err(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		return
+	}
+	json.NewEncoder(w).Encode(deviceInfos)
 	fmt.Println("Endpoint Hit: All DeviceInfos Endpoint")
-	json.NewEncoder(w).Encode(DeviceInfos)
-	fmt.Println("/geo " + r.Method + " Request recieved!")
+	fmt.Println("/device/infos "+r.Method+" request recieved: ", deviceInfos)
 }
 
 func homePage(w http.ResponseWriter, r *http.Request) {
@@ -45,6 +91,15 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "To see all the records of type /geo go to:\t\thttp://localhost:10000/geos\nTo see all the records of type /device/info go to:\thttp://localhost:10000/device/infos\n\n")
 	fmt.Fprint(w, "To see a specific /geo record, go to:\t\thttp://localhost:10000/geo/{device_id}\nTo see a specific /device/info record, go to:\thttp://localhost:10000/device/info/{device_id}")
 	fmt.Println("Endpoint Hit: homePage")
+}
+
+func main() {
+	fmt.Println("Starting Kayla's Test Rest API...")
+	fmt.Println("Go to http://localhost:10000/ to see homepage")
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
+	client, _ = mongo.Connect(ctx, clientOptions)
+	handleRequests()
 }
 
 func handleRequests() {
@@ -56,155 +111,136 @@ func handleRequests() {
 	myRouter.HandleFunc("/device/info", returnAllDeviceInfos).Methods("HEAD")
 	myRouter.HandleFunc("/geo", createNewGeo).Methods("POST")
 	myRouter.HandleFunc("/device/info", createNewDeviceInfo).Methods("POST")
-	myRouter.HandleFunc("/geo/{device_id}", deleteGeo).Methods("DELETE")
-	myRouter.HandleFunc("/device/info/{device_id}", deleteDeviceInfo).Methods("DELETE")
-	myRouter.HandleFunc("/geo/{device_id}", updateGeo).Methods("PATCH")
-	myRouter.HandleFunc("/device/info/{device_id}", updateDeviceInfo).Methods("PATCH")
-	myRouter.HandleFunc("/geo/{device_id}", updateGeo).Methods("PUT")
-	myRouter.HandleFunc("/device/info/{device_id}", updateDeviceInfo).Methods("PUT")
-	myRouter.HandleFunc("/geo/{device_id}", returnSingleGeo)
-	myRouter.HandleFunc("/device/info/{device_id}", returnSingleDeviceInfo)
+	myRouter.HandleFunc("/geo/{id}", deleteGeo).Methods("DELETE")
+	myRouter.HandleFunc("/device/info/{id}", deleteDeviceInfo).Methods("DELETE")
+	myRouter.HandleFunc("/geo/{id}", updateGeo).Methods("PATCH")
+	myRouter.HandleFunc("/device/info/{id}", updateDeviceInfo).Methods("PATCH")
+	myRouter.HandleFunc("/geo/{id}", updateGeo).Methods("PUT")
+	myRouter.HandleFunc("/device/info/{id}", updateDeviceInfo).Methods("PUT")
+	myRouter.HandleFunc("/geo/{id}", returnSingleGeo)
+	myRouter.HandleFunc("/device/info/{id}", returnSingleDeviceInfo)
 	log.Fatal(http.ListenAndServe(":10000", myRouter))
 }
 
 func returnSingleGeo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("content-type", "application/json")
 	vars := mux.Vars(r)
-	key := vars["device_id"]
-	fmt.Fprintf(w, "Key: "+key)
-	for _, geo := range Geos {
-		if geo.DeviceID == key {
-			json.NewEncoder(w).Encode(geo)
-		}
+	key, _ := primitive.ObjectIDFromHex(vars["device_id"])
+	var geo Geo
+	collection := client.Database("kaylatestapi").Collection("geo")
+	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
+	err := collection.FindOne(ctx, Geo{DeviceID: key}).Decode(&geo)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		return
 	}
+	json.NewEncoder(w).Encode(geo)
+	//Print to console
+	fmt.Printf("/geo GET Request: %+v\n", geo)
 }
 
 func returnSingleDeviceInfo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("content-type", "application/json")
 	vars := mux.Vars(r)
-	key := vars["device_id"]
-	fmt.Fprintf(w, "Key: "+key)
-	for _, device := range DeviceInfos {
-		if device.DeviceID == key {
-			json.NewEncoder(w).Encode(device)
-		}
+	key, _ := primitive.ObjectIDFromHex(vars["id"])
+	var deviceInfo DeviceInfo
+	collection := client.Database("kaylatestapi").Collection("deviceinfo")
+	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
+	err := collection.FindOne(ctx, DeviceInfo{DeviceID: key}).Decode(&deviceInfo)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{ "message": "` + err.Error() + `" }`))
+		return
 	}
+	json.NewEncoder(w).Encode(deviceInfo)
+	//Print to console
+	fmt.Printf("/device/info GET Request: %+v\n", deviceInfo)
 }
 
 func createNewGeo(w http.ResponseWriter, r *http.Request) {
-	// get the body of our POST request and return the string response containing the request body
-	reqBody, _ := ioutil.ReadAll(r.Body)
+	w.Header().Set("content-type", "application/json")
 	var geo Geo
-	json.Unmarshal(reqBody, &geo)
-
+	_ = json.NewDecoder(r.Body).Decode(&geo)
 	//Print to console
 	fmt.Printf("/geo POST Request: %+v\n", geo)
-
-	//Append to list of Geos and print to local host
-	Geos = append(Geos, geo)
-	json.NewEncoder(w).Encode(geo)
-	fmt.Fprintf(w, "%+v", string(reqBody))
+	collection := client.Database("kaylatestapi").Collection("geo")
+	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	result, _ := collection.InsertOne(ctx, geo)
+	json.NewEncoder(w).Encode(result)
 }
 
 func createNewDeviceInfo(w http.ResponseWriter, r *http.Request) {
-	// get the body of our POST request and return the string response containing the request body
-	reqBody, _ := ioutil.ReadAll(r.Body)
+	w.Header().Set("content-type", "application/json")
 	var deviceInfo DeviceInfo
-	json.Unmarshal(reqBody, &deviceInfo)
-
+	_ = json.NewDecoder(r.Body).Decode(&deviceInfo)
 	//Print to console
 	fmt.Printf("/device/info POST Request: %+v\n", deviceInfo)
-
-	//Append to list of DeviceInfos and print to local host
-	DeviceInfos = append(DeviceInfos, deviceInfo)
-	json.NewEncoder(w).Encode(deviceInfo)
-	fmt.Fprintf(w, "%+v", string(reqBody))
+	collection := client.Database("kaylatestapi").Collection("deviceinfo")
+	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	result, _ := collection.InsertOne(ctx, deviceInfo)
+	json.NewEncoder(w).Encode(result)
 }
 
 func deleteGeo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("content-type", "application/json")
 	vars := mux.Vars(r)
-	// extract the `id` of the geo we want to delete
-	id := vars["device_id"]
-
-	// loop through all our geos, if id matches, print to console and delete
-	for index, geo := range Geos {
-		if geo.DeviceID == id {
-			//Print to console
-			fmt.Printf("/geo DELETE Request: %+v\n", geo)
-			Geos = append(Geos[:index], Geos[index+1:]...)
-		}
+	collection := client.Database("kaylatestapi").Collection("geo")
+	id, _ := primitive.ObjectIDFromHex(vars["id"])
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	result, err := collection.DeleteOne(ctx, bson.M{"_id": id})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"message": "` + err.Error() + `" }`))
+		return
 	}
+	json.NewEncoder(w).Encode(result)
+	//Print to console
+	fmt.Printf("/geo DELETE Request with "+id.String()+": %v\n", result)
 }
 
 func deleteDeviceInfo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("content-type", "application/json")
 	vars := mux.Vars(r)
-	// extract the `id` of the device info we want to delete
-	id := vars["device_id"]
-
-	// loop through all our device infos, if id matches, print to console and delete
-	for index, deviceInfo := range DeviceInfos {
-		if deviceInfo.DeviceID == id {
-			//Print to console
-			fmt.Printf("/device/info DELETE Request: %+v\n", deviceInfo)
-			DeviceInfos = append(DeviceInfos[:index], DeviceInfos[index+1:]...)
-		}
+	collection := client.Database("kaylatestapi").Collection("deviceinfo")
+	id, _ := primitive.ObjectIDFromHex(vars["id"])
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	result, err := collection.DeleteOne(ctx, bson.M{"_id": id})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"message": "` + err.Error() + `" }`))
+		return
 	}
+	json.NewEncoder(w).Encode(result)
+	//Print to console
+	fmt.Printf("/device/info DELETE Request with "+id.String()+": %v\n", result)
 }
 
 func updateGeo(w http.ResponseWriter, r *http.Request) {
-	geoID := mux.Vars(r)["device_id"]
-	var updatedGeo Geo
-	reqBody, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		fmt.Fprintf(w, "Only enter data with the latitude, longitude and ip_address in order to update")
-	}
-	json.Unmarshal(reqBody, &updatedGeo)
+	w.Header().Set("content-type", "application/json")
+	var geo Geo
+	_ = json.NewDecoder(r.Body).Decode(&geo)
 	//Print to console
-	fmt.Print("/geo PATCH Request for DeviceID " + geoID + ": ")
-	fmt.Printf("%+v\n", updatedGeo)
-
-	for i, singleGeo := range Geos {
-		if singleGeo.DeviceID == geoID {
-			singleGeo.Latitude = updatedGeo.Latitude
-			singleGeo.Longitude = updatedGeo.Longitude
-			singleGeo.IPAddress = updatedGeo.IPAddress
-			Geos = append(Geos[:i], singleGeo)
-			json.NewEncoder(w).Encode(singleGeo)
-		}
-	}
+	fmt.Printf("/geo "+r.Method+" Request: %+v\n", geo)
+	vars := mux.Vars(r)
+	collection := client.Database("kaylatestapi").Collection("geo")
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	key, _ := primitive.ObjectIDFromHex(vars["id"])
+	result := collection.FindOneAndReplace(ctx, bson.M{"_id": key}, geo)
+	json.NewEncoder(w).Encode(result)
 }
 
 func updateDeviceInfo(w http.ResponseWriter, r *http.Request) {
-	deviceInfoID := mux.Vars(r)["device_id"]
-	var updatedDeviceInfo DeviceInfo
-	reqBody, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		fmt.Fprintf(w, "Only enter data with the user_agent, ip_address, battery_level, and screen_orientation in order to update")
-	}
-	json.Unmarshal(reqBody, &updatedDeviceInfo)
+	w.Header().Set("content-type", "application/json")
+	var deviceInfo DeviceInfo
+	_ = json.NewDecoder(r.Body).Decode(&deviceInfo)
 	//Print to console
-	fmt.Print("/device/info PATCH Request for DeviceID " + deviceInfoID + ": ")
-	fmt.Printf("%+v\n", updatedDeviceInfo)
+	fmt.Printf("/device/info "+r.Method+" Request: %+v\n", deviceInfo)
 
-	for i, singleDeviceInfo := range DeviceInfos {
-		if singleDeviceInfo.DeviceID == deviceInfoID {
-			singleDeviceInfo.UserAgent = updatedDeviceInfo.UserAgent
-			singleDeviceInfo.IPAddress = updatedDeviceInfo.IPAddress
-			singleDeviceInfo.BatteryLevel = updatedDeviceInfo.BatteryLevel
-			singleDeviceInfo.ScreenOrientation = updatedDeviceInfo.ScreenOrientation
-			DeviceInfos = append(DeviceInfos[:i], singleDeviceInfo)
-			json.NewEncoder(w).Encode(singleDeviceInfo)
-		}
-	}
-}
-
-func main() {
-	fmt.Println("Kayla's Test Rest API Running")
-	fmt.Println("Go to http://localhost:10000/ to see homepage")
-	DeviceInfos = []DeviceInfo{
-		DeviceInfo{DeviceID: "JENNA", UserAgent: "Kayla", IPAddress: "129.232.23.121", BatteryLevel: "87%", ScreenOrientation: "vertical"},
-		DeviceInfo{DeviceID: "KAYLA", UserAgent: "Jenna", IPAddress: "120.112.19.333", BatteryLevel: "17%", ScreenOrientation: "horizontal"},
-	}
-	Geos = []Geo{
-		Geo{DeviceID: "1234", Latitude: "48.121", Longitude: "127.12", IPAddress: "129.232.23.121"},
-	}
-	handleRequests()
+	vars := mux.Vars(r)
+	collection := client.Database("kaylatestapi").Collection("deviceinfo")
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	id, _ := primitive.ObjectIDFromHex(vars["id"])
+	result := collection.FindOneAndReplace(ctx, bson.M{"_id": id}, deviceInfo)
+	json.NewEncoder(w).Encode(result)
 }
