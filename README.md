@@ -1,6 +1,6 @@
 # *Test API Project in GoLang*
 
-A GoLang RESTful API Application that accepts records/requests of certain types and prints them out to the console. It accepts any request given and prints them out to the console. It then marshalls the requests into a GoStruct (georecord object, and device details) and sends them to a DB. *TODO: Skills implemented include: XXX* 
+A GoLang RESTful API Application that accepts records/requests of type /geo and /device/info and prints them out to the console. It accepts GET, POST, PATCH, PUT, DELETE, HEAD, and OPTIONS requests. It then marshalls the requests into a GoStruct (geo object, and device info object) and sends them to MongoDB for storage. *TODO: Skills implemented include: GoLang, HTTP requests, MongoDB* 
 
 
 ## TODO: How to Run
