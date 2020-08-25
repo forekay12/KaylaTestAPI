@@ -6,6 +6,5 @@ A GoLang RESTful API Application that accepts records/requests of type /geo and 
 ## TODO: How to Run
 
 ```
-$ xxx
-$ xxx
+$ go run main.go 
 ```
