@@ -8,3 +8,7 @@ A GoLang RESTful API Application that accepts records/requests of type /geo and 
 ```
 $ go run main.go 
 ```
+
+## Important
+Add and env variable ```GOOGLE_APPLICATION_CREDENTIALS="/Users/kforemski/go/src/git.dev.kochava.com/KaylaAPI/key-file.json"```
+with the path to your gcloud key-file.json
