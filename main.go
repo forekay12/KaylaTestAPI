@@ -8,11 +8,14 @@ import (
 	"net/http"
 	"time"
 
+	"cloud.google.com/go/pubsub"
+	"cloud.google.com/go/storage"
 	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"google.golang.org/api/iterator"
+	"google.golang.org/api/option"
 )
 
 type Geo struct {
@@ -32,7 +35,55 @@ type DeviceInfo struct {
 
 var client *mongo.Client
 
+// explicit reads credentials from the specified path.
+func explicit(jsonPath, projectID string) {
+	ctx := context.Background()
+	client, err := storage.NewClient(ctx, option.WithCredentialsFile(jsonPath))
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Buckets:")
+	it := client.Buckets(ctx, projectID)
+	for {
+		battrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(battrs.Name)
+	}
+}
+
+func test() {
+	ctx := context.Background()
+	client, err := pubsub.NewClient(ctx, "cloud-test-287516")
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	topic := client.Topic("kayla")
+	defer topic.Stop()
+	var results []*pubsub.PublishResult
+	r := topic.Publish(ctx, &pubsub.Message{
+		Data: []byte("hello world"),
+	})
+	results = append(results, r)
+	// Do other work ...
+	for _, r := range results {
+		id, err := r.Get(ctx)
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Printf("Published a message with a message ID: %s\n", id)
+	}
+}
+
 func returnAllGeos(w http.ResponseWriter, r *http.Request) {
+	//Send request to google cloud
+
+	//Pull request off google cloud and print to screen
 	w.Header().Set("content-type", "application/json")
 	var geos []Geo
 	collection := client.Database("kaylatestapi").Collection("geo")
@@ -95,11 +146,13 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	fmt.Println("Starting Kayla's Test Rest API...")
-	fmt.Println("Go to http://localhost:10000/ to see homepage")
-	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
-	client, _ = mongo.Connect(ctx, clientOptions)
-	handleRequests()
+	//fmt.Println("Go to http://localhost:10000/ to see homepage")
+	//ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	//clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
+	//client, _ = mongo.Connect(ctx, clientOptions)
+	//handleRequests()
+	explicit("/Users/kforemski/go/src/git.dev.kochava.com/KaylaAPI/key-file.json", "cloud-test-287516")
+	test()
 }
 
 func handleRequests() {
