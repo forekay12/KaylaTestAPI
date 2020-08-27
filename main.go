@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )
@@ -42,7 +44,6 @@ func explicit(jsonPath, projectID string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("Buckets:")
 	it := client.Buckets(ctx, projectID)
 	for {
 		battrs, err := it.Next()
@@ -56,34 +57,28 @@ func explicit(jsonPath, projectID string) {
 	}
 }
 
-func test() {
+func publish(b []byte) {
 	ctx := context.Background()
 	client, err := pubsub.NewClient(ctx, "cloud-test-287516")
 	if err != nil {
 		fmt.Println(err)
 	}
-
 	topic := client.Topic("kayla")
 	defer topic.Stop()
 	var results []*pubsub.PublishResult
-	r := topic.Publish(ctx, &pubsub.Message{
-		Data: []byte("hello world"),
-	})
+	r := topic.Publish(ctx, &pubsub.Message{Data: b})
 	results = append(results, r)
-	// Do other work ...
 	for _, r := range results {
 		id, err := r.Get(ctx)
 		if err != nil {
 			fmt.Println(err)
 		}
 		fmt.Printf("Published a message with a message ID: %s\n", id)
+		fmt.Printf("And request body: %s\n", b)
 	}
 }
 
 func returnAllGeos(w http.ResponseWriter, r *http.Request) {
-	//Send request to google cloud
-
-	//Pull request off google cloud and print to screen
 	w.Header().Set("content-type", "application/json")
 	var geos []Geo
 	collection := client.Database("kaylatestapi").Collection("geo")
@@ -139,20 +134,19 @@ func returnAllDeviceInfos(w http.ResponseWriter, r *http.Request) {
 
 func homePage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "Welcome to the HomePage!\n\n")
-	fmt.Fprint(w, "To see all the records of type /geo go to:\t\thttp://localhost:10000/geos\nTo see all the records of type /device/info go to:\thttp://localhost:10000/device/infos\n\n")
-	fmt.Fprint(w, "To see a specific /geo record, go to:\t\thttp://localhost:10000/geo/{device_id}\nTo see a specific /device/info record, go to:\thttp://localhost:10000/device/info/{device_id}")
+	fmt.Fprint(w, "To see all the records of type /geo go to:\t\thttp://localhost:11000/geos\nTo see all the records of type /device/info go to:\thttp://localhost:11000/device/infos\n\n")
+	fmt.Fprint(w, "To see a specific /geo record, go to:\t\thttp://localhost:11000/geo/{device_id}\nTo see a specific /device/info record, go to:\thttp://localhost:11000/device/info/{device_id}")
 	fmt.Println("Endpoint Hit: homePage")
 }
 
 func main() {
-	fmt.Println("Starting Kayla's Test Rest API...")
-	//fmt.Println("Go to http://localhost:10000/ to see homepage")
-	//ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-	//clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
-	//client, _ = mongo.Connect(ctx, clientOptions)
-	//handleRequests()
 	explicit("/Users/kforemski/go/src/git.dev.kochava.com/KaylaAPI/key-file.json", "cloud-test-287516")
-	test()
+	fmt.Println("Starting Kayla's Test Rest API...")
+	fmt.Println("Go to http://localhost:11000/ to see homepage")
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
+	client, _ = mongo.Connect(ctx, clientOptions)
+	handleRequests()
 }
 
 func handleRequests() {
@@ -172,7 +166,7 @@ func handleRequests() {
 	myRouter.HandleFunc("/device/info/{id}", updateDeviceInfo).Methods("PUT")
 	myRouter.HandleFunc("/geo/{id}", returnSingleGeo)
 	myRouter.HandleFunc("/device/info/{id}", returnSingleDeviceInfo)
-	log.Fatal(http.ListenAndServe(":10000", myRouter))
+	log.Fatal(http.ListenAndServe(":11000", myRouter))
 }
 
 func returnSingleGeo(w http.ResponseWriter, r *http.Request) {
@@ -191,6 +185,10 @@ func returnSingleGeo(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(geo)
 	//Print to console
 	fmt.Printf("/geo GET Request: %+v\n", geo)
+	//Publish request to gcloud pubsub
+	reqBodyBytes := new(bytes.Buffer)
+	json.NewEncoder(reqBodyBytes).Encode(geo)
+	publish(reqBodyBytes.Bytes())
 }
 
 func returnSingleDeviceInfo(w http.ResponseWriter, r *http.Request) {
@@ -209,14 +207,28 @@ func returnSingleDeviceInfo(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(deviceInfo)
 	//Print to console
 	fmt.Printf("/device/info GET Request: %+v\n", deviceInfo)
+	//Publish request to gcloud pubsub
+	reqBodyBytes := new(bytes.Buffer)
+	json.NewEncoder(reqBodyBytes).Encode(deviceInfo)
+	publish(reqBodyBytes.Bytes())
 }
 
 func createNewGeo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	var geo Geo
 	_ = json.NewDecoder(r.Body).Decode(&geo)
+	if geo.Latitude == "" || geo.Longitude == "" {
+		fmt.Println("/geo POST Request FAILED")
+		fmt.Println("latitude and longitude are required values!")
+		return
+	}
 	//Print to console
 	fmt.Printf("/geo POST Request: %+v\n", geo)
+	//Publish request to gcloud pubsub
+	reqBodyBytes := new(bytes.Buffer)
+	json.NewEncoder(reqBodyBytes).Encode(geo)
+	publish(reqBodyBytes.Bytes())
+
 	collection := client.Database("kaylatestapi").Collection("geo")
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	result, _ := collection.InsertOne(ctx, geo)
@@ -227,8 +239,18 @@ func createNewDeviceInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	var deviceInfo DeviceInfo
 	_ = json.NewDecoder(r.Body).Decode(&deviceInfo)
+	if deviceInfo.UserAgent == "" {
+		fmt.Println("/device/info POST Request FAILED")
+		fmt.Println("user agent is a required value!")
+		return
+	}
 	//Print to console
 	fmt.Printf("/device/info POST Request: %+v\n", deviceInfo)
+	//Publish request to gcloud pubsub
+	reqBodyBytes := new(bytes.Buffer)
+	json.NewEncoder(reqBodyBytes).Encode(deviceInfo)
+	publish(reqBodyBytes.Bytes())
+
 	collection := client.Database("kaylatestapi").Collection("deviceinfo")
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	result, _ := collection.InsertOne(ctx, deviceInfo)
@@ -273,8 +295,17 @@ func updateGeo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	var geo Geo
 	_ = json.NewDecoder(r.Body).Decode(&geo)
+	if geo.Latitude == "" || geo.Longitude == "" {
+		fmt.Println("/geo POST Request FAILED")
+		fmt.Println("latitude and longitude are required values!")
+		return
+	}
 	//Print to console
 	fmt.Printf("/geo "+r.Method+" Request: %+v\n", geo)
+	//Publish request to gcloud pubsub
+	reqBodyBytes := new(bytes.Buffer)
+	json.NewEncoder(reqBodyBytes).Encode(geo)
+	publish(reqBodyBytes.Bytes())
 	vars := mux.Vars(r)
 	collection := client.Database("kaylatestapi").Collection("geo")
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
@@ -287,9 +318,17 @@ func updateDeviceInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	var deviceInfo DeviceInfo
 	_ = json.NewDecoder(r.Body).Decode(&deviceInfo)
+	if deviceInfo.UserAgent == "" {
+		fmt.Println("/device/info POST Request FAILED")
+		fmt.Println("user agent is a required value!")
+		return
+	}
 	//Print to console
 	fmt.Printf("/device/info "+r.Method+" Request: %+v\n", deviceInfo)
-
+	//Publish request to gcloud pubsub
+	reqBodyBytes := new(bytes.Buffer)
+	json.NewEncoder(reqBodyBytes).Encode(deviceInfo)
+	publish(reqBodyBytes.Bytes())
 	vars := mux.Vars(r)
 	collection := client.Database("kaylatestapi").Collection("deviceinfo")
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
