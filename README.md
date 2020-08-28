@@ -4,8 +4,9 @@ A GoLang RESTful API Application that accepts records/requests of type /geo and 
 
 
 ## How to Run
-First ensure start a MongoDB server and intialize the DB's
-I did this through Docker:
+In order to run the Gcloud pubsub functionality make sure to have a gcloud account, project, topic and subscription set up. You also need to have a service account set up with a key-file on your local system.
+
+Next, a MongoDB server needs to be started and the DB needs to be intialized, I did this through Docker:
 ```
 $ docker pull mongo:4.0.4
 $ docker run -d -p 27017-27019:27017-27019 --name mongodb mongo:4.0.4
