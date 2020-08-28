@@ -57,6 +57,7 @@ func explicit(jsonPath, projectID string) {
 	}
 }
 
+//publish pushes messages into the specified pubsub topic
 func publish(b []byte) {
 	ctx := context.Background()
 	client, err := pubsub.NewClient(ctx, "cloud-test-287516")
@@ -78,6 +79,7 @@ func publish(b []byte) {
 	}
 }
 
+//returnAllGeos is the GET endpoint for /geos
 func returnAllGeos(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	var geos []Geo
@@ -105,6 +107,7 @@ func returnAllGeos(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("/geos "+r.Method+" request recieved: ", geos)
 }
 
+//returnAllDeviceInfos is the GET endpoint for /device/infos
 func returnAllDeviceInfos(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	var deviceInfos []DeviceInfo
@@ -132,6 +135,7 @@ func returnAllDeviceInfos(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("/device/infos "+r.Method+" request recieved: ", deviceInfos)
 }
 
+//homePage is the endpoint for /
 func homePage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "Welcome to the HomePage!\n\n")
 	fmt.Fprint(w, "To see all the records of type /geo go to:\t\thttp://localhost:11000/geos\nTo see all the records of type /device/info go to:\thttp://localhost:11000/device/infos\n\n")
@@ -149,6 +153,7 @@ func main() {
 	handleRequests()
 }
 
+//handleRequests handles all types of requests and directs them to appropriate endpoints
 func handleRequests() {
 	myRouter := mux.NewRouter().StrictSlash(true)
 	myRouter.HandleFunc("/", homePage)
@@ -169,10 +174,11 @@ func handleRequests() {
 	log.Fatal(http.ListenAndServe(":11000", myRouter))
 }
 
+//returnSingleGeo is the GET endpoint for /geo/{id}
 func returnSingleGeo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	vars := mux.Vars(r)
-	key, _ := primitive.ObjectIDFromHex(vars["device_id"])
+	key, _ := primitive.ObjectIDFromHex(vars["id"])
 	var geo Geo
 	collection := client.Database("kaylatestapi").Collection("geo")
 	ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
@@ -185,12 +191,9 @@ func returnSingleGeo(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(geo)
 	//Print to console
 	fmt.Printf("/geo GET Request: %+v\n", geo)
-	//Publish request to gcloud pubsub
-	reqBodyBytes := new(bytes.Buffer)
-	json.NewEncoder(reqBodyBytes).Encode(geo)
-	publish(reqBodyBytes.Bytes())
 }
 
+//returnSingleGeo is the GET endpoint for /geo/{id}
 func returnSingleDeviceInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	vars := mux.Vars(r)
@@ -207,12 +210,10 @@ func returnSingleDeviceInfo(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(deviceInfo)
 	//Print to console
 	fmt.Printf("/device/info GET Request: %+v\n", deviceInfo)
-	//Publish request to gcloud pubsub
-	reqBodyBytes := new(bytes.Buffer)
-	json.NewEncoder(reqBodyBytes).Encode(deviceInfo)
-	publish(reqBodyBytes.Bytes())
 }
 
+//createNewGeo is a POST endpoint for /geo
+//It also publishes the request to pubsub
 func createNewGeo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	var geo Geo
@@ -235,6 +236,8 @@ func createNewGeo(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
+//createNewDeviceInfo is a POST endpoint for /deviceInfo
+//It also publishes the request to pubsub
 func createNewDeviceInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	var deviceInfo DeviceInfo
@@ -257,6 +260,7 @@ func createNewDeviceInfo(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
+//deleteGeo is a DELETE request for the endpoint /geo/{id}
 func deleteGeo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	vars := mux.Vars(r)
@@ -274,6 +278,7 @@ func deleteGeo(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("/geo DELETE Request with "+id.String()+": %v\n", result)
 }
 
+//deleteDeviceInfo is a DELETE request for the endpoing /device/info/{id}
 func deleteDeviceInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	vars := mux.Vars(r)
@@ -291,6 +296,8 @@ func deleteDeviceInfo(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("/device/info DELETE Request with "+id.String()+": %v\n", result)
 }
 
+//updateGeo is the PATCH and PUT request endpoint for /geo/{id}
+//It also publishes the request to pubsub
 func updateGeo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	var geo Geo
@@ -314,6 +321,8 @@ func updateGeo(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
+//updateDeviceInfo is the PATCH and PUT request endpoint for /device/info/{id}
+//It also publishes the request to pubsub
 func updateDeviceInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "application/json")
 	var deviceInfo DeviceInfo
