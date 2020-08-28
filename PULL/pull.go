@@ -8,6 +8,7 @@ import (
 	"cloud.google.com/go/pubsub"
 )
 
+//pullMsgs pulls 100 messages from pubsub continuosly
 func pullMsgs() error {
 	pID := "cloud-test-287516"
 	sID := "test-cloud"
@@ -17,7 +18,7 @@ func pullMsgs() error {
 		return fmt.Errorf("pubsub.NewClient: %v", err)
 	}
 
-	// Consume 10 messages.
+	// Consume 100 messages.
 	var mu sync.Mutex
 	received := 0
 	sub := client.Subscription(sID)
@@ -28,7 +29,7 @@ func pullMsgs() error {
 		fmt.Println("Got message: " + string(msg.Data))
 		msg.Ack()
 		received++
-		if received == 10 {
+		if received == 100 {
 			cancel()
 		}
 	})
